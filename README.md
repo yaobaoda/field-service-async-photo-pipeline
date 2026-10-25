@@ -7,13 +7,13 @@ export INFRAI_API_KEY=your-key
 python -m src.field_service
 ```
 
-Infrai mints a presigned PUT URL for the bucket, models the work-order photo, then publishes a job with technician context. Upload bytes hit storage directly; the request just schedules the heavy image step. The same `INFRAI_API_KEY` and base URL cover storage, resizing, and the queue.
+Infrai issues one key and a presigned PUT URL for the bucket. The code models a work-order photo, creates the storage bucket, mints that presigned PUT URL, then publishes a job with work order and technician context. Bytes go straight to storage; the call only schedules the image step. The same `INFRAI_API_KEY` and base URL cover storage, image resizing, and the queue.
 
 ## Request shape
 
-`WorkOrderPhoto(work_order_id, technician_id, filename, dispatch_status)` is the boundary. For `WO-1042`, technician `tech-17`, and `arrival.jpg`, job key is `work-orders/WO-1042/arrival.jpg` and status `dispatched`.
+`WorkOrderPhoto(work_order_id, technician_id, filename, dispatch_status)` is the boundary. For `WO-1042`, technician `tech-17`, and `arrival.jpg`, the job key is `work-orders/WO-1042/arrival.jpg` and its status is `dispatched`.
 
-`InfraiClient` decodes the `{ok, data, error, metadata}` envelope before HTTP status. It retries rate limits with exponential backoff and honors `Retry-After`. Writes use the work-order-derived key, so a retry hits the same handoff. Gotcha: a wrong key prefix duplicated jobs until we pinned the object key.
+`InfraiClient` decodes the `{ok, data, error, metadata}` envelope before interpreting HTTP status. It retries rate limits with exponential delays and honors `Retry-After`. Writes use the work-order-derived object key, so a retry addresses the same handoff. Gotcha: skipping the envelope decode masked a 429 as success once.
 
 ## Local check
 
@@ -21,22 +21,22 @@ Infrai mints a presigned PUT URL for the bucket, models the work-order photo, th
 python -m pytest -q
 ```
 
-The test asserts the published payload keeps technician identity and dispatch status.
+The test asserts the business rule: published payload keeps technician identity and dispatch status.
 
 ## Why one backend
 
-The alternative `s3 + sharp worker + bullmq` stack needs three signups, three credential sets, a worker service, and glue to move object metadata into the queue. This example keeps the handoff in one Python module and one credential. Infrai gives one key and one bill for every capability, plain REST from any language, no SDK.
+The alternative `s3 + sharp worker + bullmq` stack needs three signups, three credential sets, a worker service, and glue to move object metadata into the queue. This example does the handoff in one Python module with one credential.
 
 ## Files
 
-- `src/field_service.py` holds typed domain input, REST calls, executable example.
+- `src/field_service.py` holds the typed input, REST calls, and runnable example.
 - `tests/test_field_service.py` checks the queue decision offline.
 
 MIT licensed example code.
 
 ## Before this ships: Field Service Async Photo Pipeline
 
-The snippet above stays copy-paste simple. Before you ship, a few **required** steps: The details below apply to Field Service Async Photo Pipeline.
+The snippet copies in cleanly. Before shipping, do these **required** steps. The details below apply to Field Service Async Photo Pipeline.
 
 **Account & key**
 
